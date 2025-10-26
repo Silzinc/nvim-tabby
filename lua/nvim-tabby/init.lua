@@ -13,10 +13,16 @@ M.opts = {
 
 local tabby_ls_name = "nvim-tabby"
 local warned_ls_shutdown
+local status = {
+	initial_check = false,
+	healthy = false,
+	restarting = false,
+}
 
 local ns_id = vim.api.nvim_create_namespace("nvim-tabby")
 
----Try not to touch that from outside the plugin plz
+---Try not to touch that from outside the plugin plz.
+---It contains variables that need be accessed from several files.
 ---@private
 M.internal = {}
 
@@ -58,6 +64,8 @@ function M.setup(opts)
 				warned_ls_shutdown = false
 				-- disables completion in blink/nvim-cmp by default
 				client.server_capabilities.completionProvider = nil
+				M.check_status(client)
+				status.restarting = false
 			end,
 		}
 		vim.lsp.config(tabby_ls_name, tabby_conf)
@@ -66,8 +74,6 @@ function M.setup(opts)
 
 	local new_autocmd = vim.api.nvim_create_autocmd
 
-	-- TODO: add toggle functions for these autocmds,
-	-- keep track of their id to disable and re-enable them when needed
 	for _, k in ipairs({ "on_edit", "on_insert_enter", "on_cursor_move" }) do
 		if M.opts.auto_trigger[k] ~= false then
 			require("nvim-tabby.auto-trigger").enable(k)
@@ -88,16 +94,73 @@ function M.setup(opts)
 	new_cmd("NvimTabbyAccept", M.accept, {})
 	new_cmd("NvimTabbyAcceptWord", M.accept_word, {})
 	new_cmd("NvimTabbyAcceptLine", M.accept_line, {})
+	new_cmd("NvimTabbyRestart", function()
+		status.restarting = true
+		status.healthy = false
+		vim.lsp.enable(tabby_ls_name, false)
+		vim.lsp.enable(tabby_ls_name, true)
+		-- see `on_attach` above for the status check at restart
+	end, {})
 	new_cmd("NvimTabbyTrigger", function()
 		M.trigger(true)
 	end, {})
 end
 
+---@param client vim.lsp.Client?
+function M.check_status(client)
+	status.healthy = false
+
+	if client == nil then
+		vim.notify(
+			"Client supplied to `check_status` is `nil`.\nAre you sure tabby is running?",
+			vim.log.levels.WARN,
+			{ title = "nvim-tabby" }
+		)
+		return
+	end
+
+	local response = client:request_sync("tabby/status", { recheckConnection = status.restarting })
+
+	if response == nil or response.result == nil or response.result.status == nil then
+		vim.notify(
+			"Error while reading the status from tabby server...",
+			vim.log.levels.ERROR,
+			{ title = "nvim-tabby" }
+		)
+		return
+	end
+
+	if response.result.status == "unauthorized" then
+		vim.notify(
+			"Your token is invalid. Please update it in\n`~/.tabby-client/agent/config.toml` and restart neovim\nor run `NvimTabbyRestart`.",
+			vim.log.levels.WARN,
+			{ title = "nvim-tabby" }
+		)
+		return
+	end
+
+	if response.result.status == "disconnected" then
+		vim.notify("Failed to connect to the Tabby server.", vim.log.levels.WARN, { title = "nvim-tabby" })
+		return
+	end
+
+	status.healthy = true
+	if status.restarting then
+		vim.notify("Successfully reconnected to Tabby server", vim.log.levels.INFO, { title = "nvim-tabby" })
+		status.restarting = false
+	end
+end
+
 ---@return vim.lsp.Client?
 function M.get_client()
-	return vim.lsp.get_clients({
+	local client = vim.lsp.get_clients({
 		name = tabby_ls_name,
 	})[1]
+	if not status.initial_check then
+		M.check_status(client)
+		status.initial_check = true
+	end
+	return client
 end
 
 ---@param params table?
@@ -247,6 +310,10 @@ end
 
 ---@param pattern string
 local function accept_match(pattern)
+	if not status.healthy then
+		return
+	end
+
 	if request.result == nil then
 		return
 	end
@@ -288,7 +355,7 @@ local function accept_match(pattern)
 end
 
 function M.accept_word()
-	return accept_match("(%s*%S+)")
+	return accept_match("(%s*.?[^%s%p(){}%[%]]*)")
 end
 
 function M.accept_line()
@@ -325,6 +392,10 @@ end
 
 ---@param is_manually boolean
 function M.trigger(is_manually)
+	if not status.healthy then
+		return
+	end
+
 	M.cancel_request()
 	local params = create_params(is_manually)
 	request.params = params
@@ -340,8 +411,8 @@ function M.trigger(is_manually)
 		return
 	end
 
-	local status
-	status, request.id = client:request("textDocument/inlineCompletion", inline_completion_params, function(_, result)
+	local health
+	health, request.id = client:request("textDocument/inlineCompletion", inline_completion_params, function(_, result)
 		if request.params ~= params then
 			-- the request has been overridden, just forget this callback
 			return
@@ -354,7 +425,7 @@ function M.trigger(is_manually)
 		return display()
 	end)
 
-	if not status and not warned_ls_shutdown then
+	if not health and not warned_ls_shutdown then
 		vim.notify(
 			"Server " .. tabby_ls_name .. " was shutdown, giving suggestions is impossible.",
 			vim.log.levels.ERROR
