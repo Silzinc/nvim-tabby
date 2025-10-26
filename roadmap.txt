@@ -1,6 +1,3 @@
 - Correct FIM (take inspiration from other plugins ?)
 - Try to highlight virtual text with treesitter
-- Add option for integration with completion engines 
-  (shouldn't be too hard since tabby-agent supports textDocument/completion)
-- Add warning for missing tabby auth token
 - Document default config

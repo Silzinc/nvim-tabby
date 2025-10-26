@@ -8,15 +8,16 @@ M.opts = {
 		on_insert_enter = false,
 		on_cursor_move = false,
 	},
+	completion = false,
 	agent_start_command = { "npx", "tabby-agent", "--stdio" },
 }
 
 local tabby_ls_name = "nvim-tabby"
-local warned_ls_shutdown
-local status = {
+local ls_status = {
 	initial_check = false,
 	healthy = false,
 	restarting = false,
+	warned_shutdown = false,
 }
 
 local ns_id = vim.api.nvim_create_namespace("nvim-tabby")
@@ -28,6 +29,8 @@ M.internal = {}
 
 M.internal.augroup = vim.api.nvim_create_augroup("nvim-tabby", {})
 M.internal.in_partial_accept = false
+-- Just here to store the completion provider to re-enable it if disabled
+M.internal.ls_completionProvider = nil
 
 ---@param str string
 local function iter_lines(str)
@@ -45,6 +48,9 @@ end
 
 function M.setup(opts)
 	M.opts = vim.tbl_deep_extend("force", M.opts, opts or {})
+	local comp = require("nvim-tabby.completion")
+	comp.enable(M.opts.completion, true)
+
 	if not vim.lsp.config[tabby_ls_name] then
 		---@type vim.lsp.Config
 		local tabby_conf = {
@@ -53,19 +59,21 @@ function M.setup(opts)
 			capabilities = {
 				textDocument = {
 					inlineCompletion = {},
-					-- disables completion in blink/nvim-cmp by default
-					completion = { dynamicRegistration = false },
 				},
 			},
+			-- TODO: add config option for this
 			root_dir = function(bufnr, on_dir)
 				on_dir(vim.fs.root(bufnr, { ".git" }) or vim.uv.cwd())
 			end,
 			on_attach = function(client, bufnr)
-				warned_ls_shutdown = false
-				-- disables completion in blink/nvim-cmp by default
-				client.server_capabilities.completionProvider = nil
+				ls_status.warned_shutdown = false
+				M.internal.ls_completionProvider = client.server_capabilities.completionProvider
+
+				--HACK: We have to recall enable to update the client accordingly
+				--This function calls `get_client`. Idk about the issues it brings...
+				comp.enable(comp.is_enabled())
+
 				M.check_status(client)
-				status.restarting = false
 			end,
 		}
 		vim.lsp.config(tabby_ls_name, tabby_conf)
@@ -94,21 +102,23 @@ function M.setup(opts)
 	new_cmd("NvimTabbyAccept", M.accept, {})
 	new_cmd("NvimTabbyAcceptWord", M.accept_word, {})
 	new_cmd("NvimTabbyAcceptLine", M.accept_line, {})
-	new_cmd("NvimTabbyRestart", function()
-		status.restarting = true
-		status.healthy = false
-		vim.lsp.enable(tabby_ls_name, false)
-		vim.lsp.enable(tabby_ls_name, true)
-		-- see `on_attach` above for the status check at restart
-	end, {})
+	new_cmd("NvimTabbyRestart", M.restart, {})
 	new_cmd("NvimTabbyTrigger", function()
 		M.trigger(true)
 	end, {})
 end
 
+function M.restart()
+	ls_status.restarting = true
+	ls_status.healthy = false
+	vim.lsp.enable(tabby_ls_name, false)
+	vim.lsp.enable(tabby_ls_name, true)
+	-- see `on_attach` above and `check_status` below for the status check at restart
+end
+
 ---@param client vim.lsp.Client?
 function M.check_status(client)
-	status.healthy = false
+	ls_status.healthy = false
 
 	if client == nil then
 		vim.notify(
@@ -119,11 +129,11 @@ function M.check_status(client)
 		return
 	end
 
-	local response = client:request_sync("tabby/status", { recheckConnection = status.restarting })
+	local response = client:request_sync("tabby/status", { recheckConnection = ls_status.restarting })
 
 	if response == nil or response.result == nil or response.result.status == nil then
 		vim.notify(
-			"Error while reading the status from tabby server...",
+			"Unhandled error while reading the status from tabby server...",
 			vim.log.levels.ERROR,
 			{ title = "nvim-tabby" }
 		)
@@ -144,10 +154,10 @@ function M.check_status(client)
 		return
 	end
 
-	status.healthy = true
-	if status.restarting then
+	ls_status.healthy = true
+	if ls_status.restarting then
 		vim.notify("Successfully reconnected to Tabby server", vim.log.levels.INFO, { title = "nvim-tabby" })
-		status.restarting = false
+		ls_status.restarting = false
 	end
 end
 
@@ -156,9 +166,9 @@ function M.get_client()
 	local client = vim.lsp.get_clients({
 		name = tabby_ls_name,
 	})[1]
-	if not status.initial_check then
+	if not ls_status.initial_check then
 		M.check_status(client)
-		status.initial_check = true
+		ls_status.initial_check = true
 	end
 	return client
 end
@@ -310,7 +320,7 @@ end
 
 ---@param pattern string
 local function accept_match(pattern)
-	if not status.healthy then
+	if not ls_status.healthy then
 		return
 	end
 
@@ -392,7 +402,7 @@ end
 
 ---@param is_manually boolean
 function M.trigger(is_manually)
-	if not status.healthy then
+	if not ls_status.healthy then
 		return
 	end
 
@@ -425,12 +435,12 @@ function M.trigger(is_manually)
 		return display()
 	end)
 
-	if not health and not warned_ls_shutdown then
+	if not health and not ls_status.warned_shutdown then
 		vim.notify(
 			"Server " .. tabby_ls_name .. " was shutdown, giving suggestions is impossible.",
 			vim.log.levels.ERROR
 		)
-		warned_ls_shutdown = true
+		ls_status.warned_shutdown = true
 	end
 end
 
