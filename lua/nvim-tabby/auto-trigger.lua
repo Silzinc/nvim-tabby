@@ -8,6 +8,7 @@ local auto_trigger_config = {
 	on_cursor_move = { events = "CursorMovedI" },
 }
 
+---Template for auto-trigger callbacks
 ---@param trigger_type NvimTabby.AutoTriggerType
 local function get_callback(trigger_type)
 	return function()
