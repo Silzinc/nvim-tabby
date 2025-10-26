@@ -14,7 +14,6 @@ M.opts = {
 
 local tabby_ls_name = "nvim-tabby"
 local ls_status = {
-	initial_check = false,
 	healthy = false,
 	restarting = false,
 	warned_shutdown = false,
@@ -71,7 +70,7 @@ function M.setup(opts)
 
 				--HACK: We have to recall enable to update the client accordingly
 				--This function calls `get_client`. Idk about the issues it brings...
-				comp.enable(comp.is_enabled())
+				comp.enable(comp.is_enabled(), true, client)
 
 				M.check_status(client)
 			end,
@@ -166,10 +165,6 @@ function M.get_client()
 	local client = vim.lsp.get_clients({
 		name = tabby_ls_name,
 	})[1]
-	if not ls_status.initial_check then
-		M.check_status(client)
-		ls_status.initial_check = true
-	end
 	return client
 end
 

@@ -11,12 +11,13 @@ end
 
 ---@param enable boolean? Default: true
 ---@param silent boolean? Default: false
-function M.enable(enable, silent)
+---@param client vim.lsp.Client? Default: taken from `get_client`
+function M.enable(enable, silent, client)
 	if enable == false then
-		return M.disable()
+		return M.disable(silent, client)
 	end
 	local m = require("nvim-tabby")
-	local client = m.get_client()
+	client = client or m.get_client()
 	if client ~= nil then
 		client.server_capabilities.completionProvider = m.internal.ls_completionProvider
 	elseif not silent then
@@ -30,9 +31,10 @@ function M.enable(enable, silent)
 end
 
 ---@param silent boolean? Default: false
-function M.disable(silent)
+---@param client vim.lsp.Client? Default: taken from `get_client`
+function M.disable(silent, client)
 	local m = require("nvim-tabby")
-	local client = m.get_client()
+	client = client or m.get_client()
 	if client ~= nil then
 		client.server_capabilities.completionProvider = nil
 	elseif not silent then
@@ -45,8 +47,10 @@ function M.disable(silent)
 	enabled = false
 end
 
-function M.toggle()
-	return M.enable(not M.is_enabled())
+---@param silent boolean? Default: false
+---@param client vim.lsp.Client? Default: taken from `get_client`
+function M.toggle(silent, client)
+	return M.enable(not M.is_enabled(), silent, client)
 end
 
 return M
