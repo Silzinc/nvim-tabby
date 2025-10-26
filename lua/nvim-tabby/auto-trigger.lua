@@ -28,7 +28,11 @@ local function get_callback(trigger_type)
 end
 
 ---@param trigger_type NvimTabby.AutoTriggerType? Default: on_edit
-function M.enable(trigger_type)
+---@param enable boolean? Default: true
+function M.enable(trigger_type, enable)
+	if enable == false then
+		return M.disable(trigger_type)
+	end
 	trigger_type = trigger_type or "on_edit"
 	local conf = auto_trigger_config[trigger_type]
 	if conf.id ~= nil then
