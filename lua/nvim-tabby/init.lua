@@ -18,7 +18,7 @@ local tabby_ls_name = "nvim-tabby"
 local ls_status = {
 	healthy = false,
 	warned_shutdown = false,
-	-- Restarting in current buffer
+	-- Global restart boolean
 	restarting = false,
 	-- Global first start
 	first_start = true,
@@ -74,7 +74,6 @@ function M.setup(opts)
 				M.internal.ls_completionProvider = client.server_capabilities.completionProvider
 
 				--HACK: We have to recall enable to update the client accordingly
-				--This function calls `get_client`. Idk about the issues it brings...
 				comp.enable(comp.is_enabled(), true, client)
 
 				M.check_status(client)
