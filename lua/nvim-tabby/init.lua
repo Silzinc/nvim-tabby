@@ -17,8 +17,11 @@ M.opts = {
 local tabby_ls_name = "nvim-tabby"
 local ls_status = {
 	healthy = false,
-	restarting = false,
 	warned_shutdown = false,
+	-- Restarting in current buffer
+	restarting = false,
+	-- Global first start
+	first_start = true,
 }
 
 local ns_id = vim.api.nvim_create_namespace("nvim-tabby")
@@ -75,6 +78,8 @@ function M.setup(opts)
 				comp.enable(comp.is_enabled(), true, client)
 
 				M.check_status(client)
+				ls_status.first_start = false
+				ls_status.restarting = false
 			end,
 		}
 		vim.lsp.config(tabby_ls_name, tabby_conf)
@@ -150,7 +155,7 @@ function M.check_status(client)
 		return
 	end
 
-	if response.result.status == "disconnected" then
+	if ls_status.first_start or ls_status.restarting and response.result.status == "disconnected" then
 		vim.notify("Failed to connect to the Tabby server.", vim.log.levels.WARN, { title = "nvim-tabby" })
 		return
 	end
@@ -158,7 +163,6 @@ function M.check_status(client)
 	ls_status.healthy = true
 	if ls_status.restarting then
 		vim.notify("Successfully reconnected to Tabby server", vim.log.levels.INFO, { title = "nvim-tabby" })
-		ls_status.restarting = false
 	end
 end
 
