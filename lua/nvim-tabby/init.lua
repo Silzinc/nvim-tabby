@@ -154,7 +154,7 @@ function M.check_status(client)
 		return
 	end
 
-	if ls_status.first_start or ls_status.restarting and response.result.status == "disconnected" then
+	if (ls_status.first_start or ls_status.restarting) and response.result.status == "disconnected" then
 		vim.notify("Failed to connect to the Tabby server.", vim.log.levels.WARN, { title = "nvim-tabby" })
 		return
 	end
