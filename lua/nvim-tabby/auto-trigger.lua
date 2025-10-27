@@ -1,3 +1,5 @@
+---Some utilities for enabling/disabling automatic ghost text triggers.
+
 local M = {}
 
 ---@alias NvimTabby.AutoTriggerType "on_edit"|"on_insert_enter"|"on_cursor_move"

@@ -1,3 +1,5 @@
+---Main file where the plugin is setup and the interaction with ghost text is implemented.
+
 local M = {}
 
 M.telemetry = {}
