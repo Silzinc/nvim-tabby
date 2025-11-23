@@ -1,3 +1,20 @@
 - Correct FIM (take inspiration from other plugins ?)
+  - Use the `range` param in the response items to break response `insertText` into suffix and prefix.
+    In the end, we should have `insertText == prefix .. text_in_range .. suffix`. Set prefix to be
+    empty if range is empty.
+
+    `range` has the form `{ start: { line: number, character: number }, end: { line: number, character: number } }`,
+    where each number if 1-based (see https://github.com/TabbyML/tabby/blob/ca4f90087fe8eb58fa847aed5a2c4e78e7b7adc8/clients/tabby-agent/src/codeCompletion/solution.ts#L81 and
+    https://github.com/TabbyML/tabby/blob/main/clients/tabby-chat-panel/src/types.ts#L4).
+
+  - Create two extmarks, one for prefix (if not empty) and another one for suffix.
+  - When accepting a word, a prefix one is accepted, except if the prefix is already emptied.
+    In that case, a suffix word is accepted.
+  - When accepting a line, if the prefix exists, the prefix should only be in the first line,
+    and therefore it should be fully accepted and the suffix should get the behaviour of the normal
+    completion text from then on.
+  - When doing accepting a full completion, accept prefix and suffix altogether.
+
 - Try to highlight virtual text with treesitter
+
 - Document default config
